@@ -1,0 +1,30 @@
+{
+  "name": "json2any",
+  "version": "1.0.0",
+  "description": "Fast JSON to CSV converter with Excel-safe formatting and streaming-like support. Open for future development of other formats.",
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "files": [
+    "index.js",
+    "core/"
+  ],
+  "scripts": {
+    "test": "node usage.js"
+  },
+  "keywords": [
+    "json",
+    "csv",
+    "json to csv",
+    "json converter",
+    "csv export",
+    "excel csv",
+    "json stream",
+    "ndjson",
+    "data conversion"
+  ],
+  "author": "chandruganesh",
+  "license": "MIT"
+}
