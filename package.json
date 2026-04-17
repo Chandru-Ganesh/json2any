@@ -9,11 +9,12 @@
   },
   "files": [
     "index.js",
-    "core/"
+    "core/",
+    "LICENSE",
+    "README.md"
   ],
   "scripts": {
-    "test": "node usage.js"
-  },
+    "test": "echo \"No tests yet\""  },
   "keywords": [
     "json",
     "csv",
@@ -25,6 +26,6 @@
     "ndjson",
     "data conversion"
   ],
-  "author": "chandruganesh",
+  "author": "Chandru Ganesh",
   "license": "MIT"
 }
