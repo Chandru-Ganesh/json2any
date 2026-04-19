@@ -1,11 +1,9 @@
 # json2any
 
-Convert JSON to clean, Excel-compatible CSV.
+Convert JSON to clean, Excel-compatible CSV — with full streaming support for datasets of any size.
 
 Currently supports: **JSON → CSV**
 Planned: JSON → Excel, XML, and more.
-
-This package focuses on correctness, performance, and predictable output. It handles nested objects, arrays, and edge cases that usually break CSV exports.
 
 ---
 
@@ -13,23 +11,28 @@ This package focuses on correctness, performance, and predictable output. It han
 
 Most JSON → CSV tools either:
 
-* break on nested data
-* produce messy or inconsistent output
-* ignore Excel-specific issues (encoding, formulas, quoting)
+- break on nested data
+- produce messy or inconsistent output
+- ignore Excel-specific issues (encoding, formulas, quoting)
+- run out of memory on large files
 
-This aims to fix those problems with a simple API and solid defaults.
+This fixes all of those problems with a simple API, solid defaults, and a two-pass streaming engine that keeps memory constant regardless of how large your data is.
 
 ---
 
 ## Features
 
-* Handles nested objects (dot notation)
-* Safe array serialization
-* Excel-compatible output (BOM, CRLF, formula protection)
-* Correct CSV escaping (quotes, commas, newlines)
-* Stable column order (first-seen keys)
-* Streaming API for large datasets
-* No external dependencies
+- Nested object flattening (dot notation)
+- Safe array serialization
+- Excel-compatible output (BOM, CRLF, formula protection)
+- Correct CSV escaping (quotes, commas, newlines in values)
+- Stable column order (first-seen, insertion order)
+- Heterogeneous schemas — missing fields filled with empty string
+- **Two-pass streaming** — handles GB-scale files with O(h) memory
+- Works with NDJSON and JSON arrays
+- Full TypeScript support — ships a `.d.ts` definition file
+- Dual ESM + CommonJS — works in any Node.js project
+- Zero external dependencies
 
 ---
 
@@ -41,39 +44,42 @@ npm install json2any
 
 ---
 
-## Usage
-
-### Basic
+## Quick start
 
 ```js
 import { toCSV } from 'json2any';
 
-const data = [
+const csv = toCSV([
   { id: 1, name: 'Alice' },
   { id: 2, name: 'Bob' }
-];
+]);
 
-const csv = toCSV(data);
 console.log(csv);
+```
+
+```
+id,name
+1,Alice
+2,Bob
 ```
 
 ---
 
+## Usage
+
 ### Nested objects
 
-```js
-const data = [
-  { user: { name: 'Alice', age: 30 } }
-];
+Nested objects are flattened using dot notation automatically.
 
-const csv = toCSV(data);
+```js
+const csv = toCSV([
+  { user: { name: 'Alice', age: 30 }, active: true }
+]);
 ```
 
-Output:
-
-```csv
-user.name,user.age
-Alice,30
+```
+user.name,user.age,active
+Alice,30,true
 ```
 
 ---
@@ -81,59 +87,130 @@ Alice,30
 ### Arrays
 
 ```js
-const data = [
-  { tags: ['a', 'b', 'c'] }
-];
+const csv = toCSV([
+  { tags: ['js', 'ts', 'node'] }
+]);
 ```
 
-Output:
-
-```csv
+```
 tags
-a|b|c
+js|ts|node
 ```
 
-* Arrays of primitives → pipe-separated
-* Arrays of objects → JSON string
+- Primitive arrays → pipe-separated string
+- Arrays of objects → JSON string (not expanded into columns)
 
 ---
 
-### Special characters & Excel safety
+### Heterogeneous schemas
+
+Rows with different keys are handled correctly. Missing fields become empty strings.
 
 ```js
-const data = [
-  { formula: '=SUM(A1:A10)' }
-];
+const csv = toCSV([
+  { id: 1, name: 'Alice' },
+  { id: 2, name: 'Bob', role: 'admin' }
+]);
 ```
 
-Output:
-
-```csv
-formula
-'=SUM(A1:A10)
 ```
-
-* Prevents Excel from executing formulas
-* Escapes quotes, commas, and newlines correctly
+id,name,role
+1,Alice,
+2,Bob,admin
+```
 
 ---
 
-### Streaming (large data)
+### Excel safety
+
+```js
+const csv = toCSV([
+  { formula: '=SUM(A1:A10)', note: 'hello, world' }
+]);
+```
+
+```
+formula,note
+'=SUM(A1:A10),"hello, world"
+```
+
+- Formula prefixes (`=`, `+`, `-`, `@`) are escaped with a leading apostrophe
+- Fields containing commas, quotes, or newlines are RFC-4180 quoted
+- UTF-8 BOM prepended so Excel opens the file with correct encoding
+
+---
+
+### Options
+
+```js
+toCSV(data, {
+  flatten:   true,   // flatten nested objects (default: true)
+  separator: '.',    // key separator for nested fields (default: '.')
+  delimiter: ',',    // CSV field delimiter (default: ',')
+  bom:       true,   // prepend UTF-8 BOM for Excel (default: true)
+  excelSafe: true,   // escape formula injection prefixes (default: true)
+})
+```
+
+---
+
+## Streaming
+
+### Standard streaming — `toCSVStream`
+
+Returns a readable CSV stream. Suitable for small to medium datasets.
 
 ```js
 import fs from 'fs';
 import { Readable } from 'stream';
-import { streamJSONToCSV } from 'json2any';
+import { toCSVStream } from 'json2any';
 
 const source = Readable.from([
-  JSON.stringify({ id: 1, name: 'Alice' }) + '\n',
-  JSON.stringify({ id: 2, name: 'Bob' }) + '\n'
+  '{"id":1,"name":"Alice"}\n',
+  '{"id":2,"name":"Bob"}\n'
 ]);
 
-const dest = fs.createWriteStream('output.csv');
-
-await streamJSONToCSV(source, dest);
+toCSVStream(source).pipe(fs.createWriteStream('output.csv'));
 ```
+
+---
+
+### Two-pass streaming — for large files
+
+Use `streamJSONToCSV` with `twoPass: true` for datasets that don't fit in memory.
+
+Instead of buffering rows, it spills flattened rows to a temp file during Pass 1, then streams the formatted CSV output in Pass 2. The temp file is deleted automatically.
+
+**Memory stays O(h) regardless of row count** — where h is the number of unique columns.
+
+```js
+import fs from 'fs';
+import { streamJSONToCSV } from 'json2any';
+
+const source = fs.createReadStream('large-input.ndjson');
+const dest   = fs.createWriteStream('output.csv');
+
+await streamJSONToCSV(source, dest, { twoPass: true });
+```
+
+Both NDJSON and JSON arrays are supported as input.
+
+```
+// NDJSON — one object per line
+{"id":1,"name":"Alice"}
+{"id":2,"name":"Bob"}
+
+// JSON array
+[{"id":1,"name":"Alice"},{"id":2,"name":"Bob"}]
+```
+
+#### Two-pass options
+
+| Option  | Default       | Description                                      |
+|---------|---------------|--------------------------------------------------|
+| twoPass | false         | Enable two-pass streaming engine                 |
+| tempDir | `os.tmpdir()` | Directory for the temp spill file                |
+| cleanup | true          | Delete temp file after completion (or on error)  |
 
 ---
 
@@ -141,148 +218,175 @@ await streamJSONToCSV(source, dest);
 
 ### `toCSV(data, options?)`
 
-Synchronous conversion (in-memory).
-Use for small to medium datasets.
+Synchronous, in-memory conversion. Returns a CSV string.
+
+```ts
+toCSV(data: object | object[], options?: CSVOptions): string
+```
+
+Use for small to medium datasets that comfortably fit in memory.
 
 ---
 
 ### `toCSVStream(source, options?)`
 
-Returns a readable CSV stream.
+Returns a readable CSV stream. Buffers all rows before emitting output.
+
+```ts
+toCSVStream(source: Readable, options?: CSVOptions): Readable
+```
 
 ---
 
-### `streamJSONToCSV(source, destination, options?)`
+### `streamJSONToCSV(source, dest, options?)`
 
-Pipes JSON stream → CSV output.
+Async pipeline — streams JSON input to a writable destination.
 
----
+```ts
+streamJSONToCSV(source: Readable, dest: Writable, options?: CSVOptions): Promise<void>
+```
 
-## Options
-
-| Option         | Default | Description                     |                           |
-| -------------- | ------- | ------------------------------- | ------------------------- |
-| flatten        | true    | Flatten nested objects          |                           |
-| separator      | "."     | Key separator for nested fields |                           |
-| delimiter      | ","     | CSV delimiter                   |                           |
-| bom            | true    | Add UTF-8 BOM for Excel         |                           |
-| excelSafe      | true    | Prevent formula injection       |                           |
-| arraySeparator | "       | "                               | Used for primitive arrays |
+- Without `twoPass` — buffered, same memory behaviour as `toCSVStream`
+- With `twoPass: true` — two-pass engine, constant memory, GB-scale safe
 
 ---
 
-## Behavior details
+## TypeScript
 
-* Missing fields → empty string
-* Column order → first appearance in data
-* Dates → ISO format
-* Objects → flattened (or stringified if `flatten=false`)
-* Arrays → not expanded into multiple columns
+The package ships a `.d.ts` file. No `@types/` package needed.
+
+```ts
+import { toCSV, streamJSONToCSV } from 'json2any';
+import type { CSVOptions, FlatRecord } from 'json2any';
+
+const opts: CSVOptions = {
+  twoPass:   true,
+  delimiter: ',',
+  bom:       true,
+};
+
+await streamJSONToCSV(source, dest, opts);
+```
+
+---
+
+## ESM and CommonJS
+
+Both module systems are supported with zero configuration.
+
+```js
+// ESM
+import { toCSV } from 'json2any';
+
+// CommonJS
+const { toCSV } = require('json2any');
+```
 
 ---
 
 ## Architecture
 
-The package is split into small, focused modules:
-
 ```
-core/
-  flatten.js     → iterative JSON flattener
-  formatter.js   → CSV formatting + Excel safety
-  csvWriter.js   → streaming pipeline
-index.js         → public API
+src/
+  index.js              → public API
+  core/
+    flatten.js          → iterative JSON flattener (no recursion)
+    formatter.js        → CSV formatting, Excel safety, RFC-4180 quoting
+    parser.js           → NDJSON + JSON array stream parser
+    csvWriter.js        → buffered streaming pipeline
+    twoPassWriter.js    → two-pass streaming engine
+dist/
+  esm/                  → ESM build (tree-shakeable)
+  cjs/                  → CommonJS build
+  types/                → TypeScript definitions
 ```
 
 ### Flattening
 
-* Uses an **iterative stack (no recursion)**
-* Avoids call stack limits and reduces overhead
-* Complexity: O(k) where k = number of leaf values
+Uses an iterative stack — no recursion, no call-stack limits.
 
-Key idea:
-
-* Objects → flattened using dot notation
-* Arrays → serialized immediately (pipe-separated or JSON string)
-
----
+- Objects → dot-notation keys (`user.address.city`)
+- Arrays → serialized immediately (pipe-separated string)
+- Complexity: O(k) where k = total leaf values across the object tree
 
 ### Formatting
 
-Handles all CSV correctness rules:
+All formatting is pure and stateless.
 
-* RFC-4180 quoting
-* Double-quote escaping (`"` → `""`)
-* Excel formula protection (`=`, `+`, `-`, `@`)
-* UTF-8 BOM for Excel compatibility
-* CRLF line endings
+- RFC-4180 quoting (fields with commas, quotes, or newlines)
+- Double-quote escaping (`"` → `""`)
+- Excel formula protection (`=`, `+`, `-`, `@`)
+- UTF-8 BOM
+- CRLF line endings
 
-All functions are **pure and stateless**.
-
----
-
-### Streaming pipeline
+### Two-pass streaming engine
 
 ```
-JSON stream
-   ↓
-NDJSONParser
-   ↓
-FlattenAccumulator
-   ↓
-CSVSerializer
-   ↓
-Writable stream (file / HTTP)
+Pass 1 — Scan + Spill                     Memory: O(h)
+──────────────────────────────────────────────────────
+Input stream
+  → NDJSONParser        (emit one JS object per record)
+  → Pass1Spiller        (flatten → collect header keys → write line to disk)
+  → temp file
+
+Pass 2 — Emit CSV                         Memory: O(1) per row
+──────────────────────────────────────────────────────
+temp file (read stream)
+  → Pass2CSVFormatter   (parse line → format CSV row → emit immediately)
+  → output stream
 ```
 
-* Supports NDJSON and JSON arrays
-* Buffers rows to collect headers before writing
-* Designed for performance and simplicity
+The header Map is the only structure that grows with the dataset — one entry per unique column name, never per row.
 
 ---
 
 ## Performance
 
-* ~25–30 MB/s on typical datasets
-* Linear with respect to output size
-* No recursion (iterative processing)
-* Minimal allocations in hot paths
+- ~25–30 MB/s on typical datasets
+- Linear with respect to output size
+- No recursion — iterative flattening throughout
+- Under 15 MB heap growth measured at 100k rows on the two-pass path
+
+---
+
+## Behavior reference
+
+| Input               | Output                                    |
+|---------------------|-------------------------------------------|
+| Nested object       | Dot-notation keys (`user.name`)           |
+| Array of primitives | Pipe-separated (`a\|b\|c`)               |
+| Array of objects    | JSON string per cell                      |
+| `null` / `undefined`| Empty string                              |
+| `Date`              | ISO 8601 string                           |
+| Boolean             | `"true"` or `"false"`                     |
+| Formula prefix      | Apostrophe-prefixed (`'=SUM(...)`)        |
+| Missing field       | Empty string                              |
 
 ---
 
 ## Limitations
 
-* Not constant-memory streaming (rows buffered before writing)
-* Arrays of objects are not expanded into separate columns
-* Header order depends on input data order
-* Very large datasets (>500MB) may require a two-pass approach
+- Arrays of objects are not expanded into sub-columns
+- Header order follows first-seen insertion order
+- Two-pass mode writes a temp file roughly equal in size to the input
 
 ---
 
 ## When to use this
 
-Use this if you need:
-
-* predictable CSV output
-* Excel-compatible files
-* support for nested JSON
-* good performance without extra dependencies
-
----
-
-## When not to use this
-
-* Extremely large datasets requiring strict constant memory
-* Complex schema transformations
-* Full Excel (.xlsx) generation (not yet supported)
+- You need predictable, Excel-ready CSV output
+- Your data is nested and other tools mangle it
+- You are working with large files and need constant-memory streaming
+- You want TypeScript types without extra packages
+- You want zero production dependencies
 
 ---
 
 ## Roadmap
 
-* JSON → Excel (.xlsx)
-* CSV → JSON
-* True constant-memory streaming (two-pass)
-* Worker-thread parallel processing
+- JSON → Excel (`.xlsx`)
+- CSV → JSON
+- Worker-thread parallel processing
 
 ---
 

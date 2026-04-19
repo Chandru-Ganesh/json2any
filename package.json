@@ -1,20 +1,27 @@
 {
   "name": "json2any",
-  "version": "1.0.0",
-  "description": "Fast JSON to CSV converter with Excel-safe formatting and streaming-like support. Open for future development of other formats.",
+  "version": "2.0.1",
+  "description": "Fast JSON to CSV converter — Excel-safe, streaming, two-pass GB-scale support. ESM + CJS + TypeScript.",
   "type": "module",
-  "main": "./index.js",
   "exports": {
-    ".": "./index.js"
+    ".": {
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.cjs",
+      "types": "./dist/types/index.d.ts"
+    }
   },
+  "main": "./dist/cjs/index.cjs",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/types/index.d.ts",
   "files": [
-    "index.js",
-    "core/",
+    "dist/",
     "LICENSE",
     "README.md"
   ],
   "scripts": {
-    "test": "echo \"No tests yet\""  },
+    "build": "node build.mjs",
+    "test": "echo \"No tests yet\""
+  },
   "keywords": [
     "json",
     "csv",
@@ -24,8 +31,15 @@
     "excel csv",
     "json stream",
     "ndjson",
-    "data conversion"
+    "data conversion",
+    "streaming",
+    "two-pass",
+    "large files",
+    "typescript"
   ],
   "author": "Chandru Ganesh",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^25.6.0"
+  }
 }
