@@ -1,20 +1,4 @@
-/**
- * build.mjs — Zero-dependency dual-module build for json2any V3
- *
- * Outputs:
- *   dist/esm/   — ESM files (untouched copies, tree-shakeable)
- *   dist/cjs/   — CommonJS files (.cjs, auto-transformed)
- *   dist/types/ — TypeScript definitions (.d.ts copy)
- *
- * ESM → CJS transformation rules:
- *   import { X, Y }         from 'Z'     →  const { X, Y }       = require('Z')
- *   import { X as Y }       from 'Z'     →  const { X: Y }       = require('Z')
- *   import { X, Y as Z }    from './p.js'→  const { X, Y: Z }    = require('./p.cjs')
- *   export { A, B };                     →  module.exports = { A, B };
- *   'use strict' deduplicated if already present.
- *
- * No webpack. No rollup. No esbuild. Pure Node built-ins.
- */
+
 
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'fs';
 import { dirname } from 'path';
