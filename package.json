@@ -1,29 +1,33 @@
 {
   "name": "json2any",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Fast JSON to CSV converter — Excel-safe, streaming, two-pass GB-scale support. ESM + CJS + TypeScript.",
   "type": "module",
   "exports": {
     ".": {
-      "import": "./dist/esm/index.js",
-      "require": "./dist/cjs/index.cjs",
-      "types": "./dist/types/index.d.ts"
+      "types":   "./dist/types/index.d.ts",
+      "import":  "./dist/esm/index.js",
+      "require": "./dist/cjs/index.cjs"
     }
   },
-  "main": "./dist/cjs/index.cjs",
+  "main":   "./dist/cjs/index.cjs",
   "module": "./dist/esm/index.js",
-  "types": "./dist/types/index.d.ts",
+  "types":  "./dist/types/index.d.ts",
   "files": [
     "dist/",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "node build.mjs",
-    "test": "echo \"No tests yet\""
+    "test":  "echo \"No tests yet\""
   },
   "keywords": [
     "json",
+    "json2any",
+    "2",
+    "any",
     "csv",
     "json to csv",
     "json converter",
@@ -37,6 +41,10 @@
     "large files",
     "typescript"
   ],
+  "engines": {
+    "node": ">=16"
+  },
+  "sideEffects": false,
   "author": "Chandru Ganesh",
   "license": "MIT",
   "devDependencies": {
